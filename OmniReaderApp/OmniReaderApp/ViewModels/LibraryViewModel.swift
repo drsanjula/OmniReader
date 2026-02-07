@@ -9,6 +9,8 @@ class LibraryViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private let fileManager = FileManager.default
+    private let rustBridge = RustBridge.shared
+    
     private var libraryURL: URL {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let omnireaderDir = appSupport.appendingPathComponent("OmniReader", isDirectory: true)
@@ -29,11 +31,11 @@ class LibraryViewModel: ObservableObject {
     func loadBooks() {
         isLoading = true
         
-        // TODO: Load from SQLite via Rust core
-        // For now, load from UserDefaults as placeholder
+        // Load from UserDefaults (temporary - will use SQLite via Rust later)
         if let data = UserDefaults.standard.data(forKey: "omnireader.books"),
-           let savedBooks = try? JSONDecoder().decode([Book].self, from: data) {
-            books = savedBooks.sorted { ($0.addedAt ?? Date()) > ($1.addedAt ?? Date()) }
+           let savedBooks = try? JSONDecoder().decode([SerializableBook].self, from: data) {
+            books = savedBooks.map { $0.toBook() }
+                .sorted { $0.addedAt > $1.addedAt }
         }
         
         isLoading = false
@@ -41,8 +43,8 @@ class LibraryViewModel: ObservableObject {
     
     /// Save books to persistent storage
     private func saveBooks() {
-        // TODO: Save to SQLite via Rust core
-        if let data = try? JSONEncoder().encode(books) {
+        let serializableBooks = books.map { SerializableBook(from: $0) }
+        if let data = try? JSONEncoder().encode(serializableBooks) {
             UserDefaults.standard.set(data, forKey: "omnireader.books")
         }
     }
@@ -76,7 +78,8 @@ class LibraryViewModel: ObservableObject {
             }
             try fileManager.copyItem(at: url, to: destURL)
             
-            // Create book entry
+            // Create book entry with current timestamp
+            let now = Int64(Date().timeIntervalSince1970)
             let book = Book(
                 id: UUID().uuidString,
                 title: url.deletingPathExtension().lastPathComponent,
@@ -84,7 +87,7 @@ class LibraryViewModel: ObservableObject {
                 filePath: destURL.path,
                 fileType: ext == "pdf" ? .pdf : .epub,
                 coverData: nil,
-                addedAt: Date(),
+                addedAt: now,
                 lastReadAt: nil,
                 totalPages: 0
             )
@@ -92,10 +95,37 @@ class LibraryViewModel: ObservableObject {
             books.insert(book, at: 0)
             saveBooks()
             
-            // TODO: Extract metadata and cover via Rust core
+            // Extract metadata asynchronously via Rust core
+            Task {
+                await extractMetadata(for: book)
+            }
             
         } catch {
             errorMessage = "Failed to import: \(error.localizedDescription)"
+        }
+    }
+    
+    /// Extract metadata for a book using Rust core
+    private func extractMetadata(for book: Book) async {
+        do {
+            let (metadata, _) = try await rustBridge.importBook(from: URL(fileURLWithPath: book.filePath))
+            
+            // Update book with extracted metadata
+            if let index = books.firstIndex(where: { $0.id == book.id }) {
+                var updatedBook = books[index]
+                if let title = metadata.title {
+                    updatedBook.title = title
+                }
+                updatedBook.author = metadata.author
+                updatedBook.coverData = metadata.coverData
+                updatedBook.totalPages = metadata.totalPages
+                
+                books[index] = updatedBook
+                saveBooks()
+            }
+        } catch {
+            print("Metadata extraction failed: \(error.localizedDescription)")
+            // Book is still saved, just without rich metadata
         }
     }
     
@@ -122,5 +152,46 @@ class LibraryViewModel: ObservableObject {
                 importBook(from: url)
             }
         }
+    }
+}
+
+// MARK: - Serializable Book for UserDefaults persistence
+
+/// A Codable wrapper for Book to enable JSON serialization
+private struct SerializableBook: Codable {
+    let id: String
+    var title: String
+    var author: String?
+    let filePath: String
+    let fileType: String // "pdf" or "epub"
+    var coverData: Data?
+    var addedAt: Int64
+    var lastReadAt: Int64?
+    var totalPages: UInt32
+    
+    init(from book: Book) {
+        self.id = book.id
+        self.title = book.title
+        self.author = book.author
+        self.filePath = book.filePath
+        self.fileType = book.fileType == .pdf ? "pdf" : "epub"
+        self.coverData = book.coverData
+        self.addedAt = book.addedAt
+        self.lastReadAt = book.lastReadAt
+        self.totalPages = book.totalPages
+    }
+    
+    func toBook() -> Book {
+        Book(
+            id: id,
+            title: title,
+            author: author,
+            filePath: filePath,
+            fileType: fileType == "pdf" ? .pdf : .epub,
+            coverData: coverData,
+            addedAt: addedAt,
+            lastReadAt: lastReadAt,
+            totalPages: totalPages
+        )
     }
 }
