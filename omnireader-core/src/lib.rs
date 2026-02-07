@@ -9,7 +9,9 @@
 pub mod annotation;
 pub mod book;
 pub mod db;
+pub mod epub;
 pub mod error;
+pub mod pdf;
 
 use uniffi;
 
