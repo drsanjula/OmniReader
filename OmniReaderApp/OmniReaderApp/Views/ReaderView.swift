@@ -106,39 +106,123 @@ struct EPUBReaderView: View {
     @Binding var currentPage: Int
     @Binding var totalPages: Int
     @State private var chapterContent: String = ""
+    @State private var chapterTitle: String = ""
+    @State private var isLoading = true
+    @State private var errorMessage: String?
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading) {
-                // Render HTML content
-                HTMLContentView(html: chapterContent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !chapterTitle.isEmpty {
+                        Text(chapterTitle)
+                            .font(.title)
+                            .fontWeight(.bold)
+                    }
+                    
+                    // Render HTML content
+                    HTMLContentView(html: wrapHtml(chapterContent))
+                        .frame(minHeight: 600)
+                }
+                .padding(40)
             }
-            .padding(40)
+            .background(Color(nsColor: .textBackgroundColor))
+            
+            if isLoading {
+                VStack {
+                    ProgressView()
+                    Text("Loading chapter...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            if let error = errorMessage {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            }
         }
-        .background(Color(nsColor: .textBackgroundColor))
-        .onAppear {
-            loadChapter()
+        .task {
+            await loadChapterCount()
+            await loadChapter()
         }
         .onChange(of: currentPage) { _, _ in
-            loadChapter()
+            Task { await loadChapter() }
         }
     }
     
-    private func loadChapter() {
-        // TODO: Load chapter content from Rust core
-        // For now, show placeholder
-        chapterContent = """
+    private func loadChapterCount() async {
+        do {
+            let count = try await RustBridge.shared.getEpubChapterCount(filePath: book.filePath)
+            totalPages = Int(count)
+        } catch {
+            print("Failed to get chapter count: \(error)")
+        }
+    }
+    
+    private func loadChapter() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let chapter = try await RustBridge.shared.getEpubChapter(
+                filePath: book.filePath,
+                chapterIndex: UInt32(max(0, currentPage - 1))
+            )
+            chapterTitle = chapter.title
+            chapterContent = chapter.content
+        } catch {
+            errorMessage = "Failed to load chapter: \(error.localizedDescription)"
+            chapterContent = ""
+        }
+        
+        isLoading = false
+    }
+    
+    private func wrapHtml(_ content: String) -> String {
+        // If content already has HTML structure, return as-is
+        if content.lowercased().contains("<html") {
+            return content
+        }
+        
+        // Otherwise, wrap in styled HTML
+        return """
+        <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <style>
-                body { font-family: Georgia, serif; font-size: 18px; line-height: 1.6; }
-                h1, h2, h3 { font-family: -apple-system, sans-serif; }
+                body {
+                    font-family: Georgia, serif;
+                    font-size: 18px;
+                    line-height: 1.8;
+                    color: #333;
+                    max-width: 700px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                h1, h2, h3, h4, h5, h6 {
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    line-height: 1.3;
+                }
+                img { max-width: 100%; height: auto; }
+                a { color: #0066cc; }
+                @media (prefers-color-scheme: dark) {
+                    body { color: #e0e0e0; background: transparent; }
+                    a { color: #4da3ff; }
+                }
             </style>
         </head>
         <body>
-            <h1>Chapter \(currentPage)</h1>
-            <p>EPUB content will be loaded here once UniFFI bindings are connected.</p>
+            \(content)
         </body>
         </html>
         """
