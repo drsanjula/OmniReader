@@ -1,0 +1,30 @@
+# Build artifacts
+/target/
+*.dylib
+*.a
+
+# IDE
+.idea/
+*.xcuserdata/
+*.xcworkspace/
+!*.xcodeproj/project.xcworkspace/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Xcode build
+/build/
+DerivedData/
+
+# Rust
+Cargo.lock
+
+# Generated files
+OmniReaderApp/OmniReaderApp/Generated/
+
+# Test files
+*.pdf
+*.epub
+!test_fixtures/

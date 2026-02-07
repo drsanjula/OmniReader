@@ -1,0 +1,33 @@
+[package]
+name = "omnireader-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core engine for OmniReader - privacy-first ebook reader"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+name = "omnireader_core"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+# FFI bindings
+uniffi = { version = "0.29", features = ["cli"] }
+
+# Database
+rusqlite = { version = "0.33", features = ["bundled"] }
+
+# PDF rendering - uses bundled pdfium
+pdfium-render = { version = "0.8", features = ["image", "static"] }
+
+# EPUB parsing
+epub = "2.1"
+
+# Utilities
+uuid = { version = "1.11", features = ["v4"] }
+thiserror = "2.0"
+chrono = "0.4"
+
