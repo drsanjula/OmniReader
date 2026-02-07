@@ -20,8 +20,8 @@ uniffi = { version = "0.29", features = ["cli"] }
 # Database
 rusqlite = { version = "0.33", features = ["bundled"] }
 
-# PDF rendering - uses bundled pdfium
-pdfium-render = { version = "0.8", features = ["image", "static"] }
+# PDF rendering - dynamically load pdfium library (default behavior)
+pdfium-render = { version = "0.8", features = ["image"] }
 
 # EPUB parsing
 epub = "2.1"

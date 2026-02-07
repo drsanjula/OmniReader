@@ -1,22 +1,29 @@
 //! PDF parsing and rendering using pdfium-render
 //!
-//! Uses statically linked PDFium library via the `static` feature.
+//! Uses dynamically loaded PDFium library.
 
 use crate::book::BookMetadata;
 use crate::error::OmniReaderError;
 use pdfium_render::prelude::*;
 use std::path::Path;
 
-/// Get a Pdfium instance - uses statically linked library
+/// Get a Pdfium instance - load dynamically from system or bundled location
 fn get_pdfium() -> Result<Pdfium, OmniReaderError> {
-    let bindings =
-        Pdfium::bind_to_statically_linked_library().map_err(|e| OmniReaderError::ParseError {
-            message: format!("Failed to bind to PDFium: {}", e),
+    // Try to load from common locations
+    let bindings = Pdfium::bind_to_system_library()
+        .or_else(|_| Pdfium::bind_to_library("libpdfium.dylib"))
+        .or_else(|_| Pdfium::bind_to_library("/usr/local/lib/libpdfium.dylib"))
+        .map_err(|e| OmniReaderError::ParseError {
+            message: format!(
+                "Failed to load PDFium library: {}. Please install PDFium or set PDFIUM_PATH.",
+                e
+            ),
         })?;
     Ok(Pdfium::new(bindings))
 }
 
 /// Extract metadata from a PDF file
+#[uniffi::export]
 pub fn extract_pdf_metadata(file_path: &str) -> Result<BookMetadata, OmniReaderError> {
     let path = Path::new(file_path);
     if !path.exists() {
@@ -74,6 +81,7 @@ pub fn extract_pdf_metadata(file_path: &str) -> Result<BookMetadata, OmniReaderE
 }
 
 /// Render a PDF page to PNG data
+#[uniffi::export]
 pub fn render_pdf_page(
     file_path: &str,
     page_number: u32,
@@ -105,6 +113,7 @@ pub fn render_pdf_page(
 }
 
 /// Get PDF page count
+#[uniffi::export]
 pub fn get_pdf_page_count(file_path: &str) -> Result<u32, OmniReaderError> {
     let pdfium = get_pdfium()?;
 

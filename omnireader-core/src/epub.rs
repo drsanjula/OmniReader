@@ -6,7 +6,7 @@ use epub::doc::EpubDoc;
 use std::path::Path;
 
 /// Chapter content from EPUB
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct EpubChapter {
     pub index: u32,
     pub title: String,
@@ -14,7 +14,7 @@ pub struct EpubChapter {
 }
 
 /// Table of contents entry
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct TocEntry {
     pub index: u32,
     pub title: String,
@@ -22,6 +22,7 @@ pub struct TocEntry {
 }
 
 /// Extract metadata from an EPUB file
+#[uniffi::export]
 pub fn extract_epub_metadata(file_path: &str) -> Result<BookMetadata, OmniReaderError> {
     let path = Path::new(file_path);
     if !path.exists() {
@@ -59,6 +60,7 @@ pub fn extract_epub_metadata(file_path: &str) -> Result<BookMetadata, OmniReader
 }
 
 /// Get the table of contents
+#[uniffi::export]
 pub fn get_epub_toc(file_path: &str) -> Result<Vec<TocEntry>, OmniReaderError> {
     let doc = EpubDoc::new(file_path).map_err(|e| OmniReaderError::ParseError {
         message: format!("Failed to open EPUB: {}", e),
@@ -79,6 +81,7 @@ pub fn get_epub_toc(file_path: &str) -> Result<Vec<TocEntry>, OmniReaderError> {
 }
 
 /// Get chapter content by index (0-based, from spine)
+#[uniffi::export]
 pub fn get_epub_chapter(
     file_path: &str,
     chapter_index: u32,
@@ -122,6 +125,7 @@ pub fn get_epub_chapter(
 }
 
 /// Get total number of chapters (spine items)
+#[uniffi::export]
 pub fn get_epub_chapter_count(file_path: &str) -> Result<u32, OmniReaderError> {
     let doc = EpubDoc::new(file_path).map_err(|e| OmniReaderError::ParseError {
         message: format!("Failed to open EPUB: {}", e),
@@ -131,6 +135,7 @@ pub fn get_epub_chapter_count(file_path: &str) -> Result<u32, OmniReaderError> {
 }
 
 /// Get EPUB cover image data
+#[uniffi::export]
 pub fn get_epub_cover(file_path: &str) -> Result<Option<Vec<u8>>, OmniReaderError> {
     let mut doc = EpubDoc::new(file_path).map_err(|e| OmniReaderError::ParseError {
         message: format!("Failed to open EPUB: {}", e),
